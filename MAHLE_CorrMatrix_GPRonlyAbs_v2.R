@@ -1,0 +1,249 @@
+##################################################################################################
+# Business Analytics Master Project
+# MCT 4: Maximilian Drüschler, Ivana Grbus, Kim Hoffmann, Mika Sang, Wolfram Stahl
+##################################################################################################
+
+
+getwd()
+
+# Installing and loading packages
+pkgs <- list("glmnet", "reticulate", "stringr", "rstudioapi", "data.table", "parallel", "minpack.lm", "doParallel",
+             "foreach", "pROC", "gplots", "pwr", "dplyr", "caret", "sm", "ggplot2", "scales", "reshape2", "Hmisc",
+             "bayesAB", "gridExtra", "plotly", "flux", "RColorBrewer", "plm", "xts", "pdp", "vip", "ranger", "vioplot", "corrplot")
+# install packages in list
+lapply(pkgs, install.packages, character.only = T)
+
+# load packages in list
+lapply(pkgs, require, character.only = T)
+
+# loading data
+data <- BAMP_Master_Excel_v6_WIP_corrected_
+
+## Hier Spalten relevanten auswählen
+data_selected <- data %>%
+  select(c(1:8, 9:10, 15:16, 21:22, 27:28, 33:34, 39:40, 45:46, 51:52, 57:58, 63:64, 69:70, 75:76, 81:82, 87:88, 93:94, 99:107))
+# checking last columns 
+summary(data_selected)[, 39:47]
+# column 99 -> Platzhalter, keine Werte
+# Sales keine Kennzahl der OSC-> brauchen wir für Korrelationsanalyse nicht
+
+data_selected <- data_selected %>%
+  select(c(1:38))
+
+summary(data_selected)
+
+## creating one data frame for YTD features and one for MTD features
+data_YTD <- data_selected %>%
+  select(c(1:8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 38, 36))
+
+data_MTD <- data_selected %>%
+  select(c(1:8, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 37, 35))
+
+
+
+### turning 'NULL' into 'NA' and changing column types to numerical
+
+numerical_columns <- c(9:23) # replace with your column numbers
+
+# for YTD dataframe
+data_YTD[, numerical_columns] <- lapply(data_YTD[, numerical_columns], function(x) {
+  x[x == 'NULL'] <- NA
+  return(x)
+})
+
+
+data_YTD[, numerical_columns] <- lapply(data_YTD[, numerical_columns], function(x) {
+  x <- as.numeric(x)
+  return(x)
+})
+
+summary(data_YTD)
+
+# for MTD dataframe
+data_MTD[, numerical_columns] <- lapply(data_MTD[, numerical_columns], function(x) {
+  x[x == 'NULL'] <- NA
+  return(x)
+})
+
+
+data_MTD[, numerical_columns] <- lapply(data_MTD[, numerical_columns], function(x) {
+  x <- as.numeric(x)
+  return(x)
+})
+
+summary(data_MTD)
+
+########################## Correlation analysis
+################# MTD
+############ With missing values
+
+# Standardize the variables
+data_MTD_scaled <- scale(data_MTD[, numerical_columns])
+
+# Calculate the correlation matrix
+cor_matrix_MTD <- cor(data_MTD_scaled, use = "pairwise.complete.obs")
+
+# Print the correlation matrix
+print(cor_matrix_MTD)
+
+# helper function to get upper triangle of the correlation matrix
+get_upper_tri_MTD <- function(cor_matrix_MTD){
+  cor_matrix_MTD[lower.tri(cor_matrix_MTD)]<- NA
+  return(cor_matrix_MTD)
+}
+
+upper_tri_MTD <- get_upper_tri_MTD(cor_matrix_MTD)
+
+melted_cormat_MTD <- melt(upper_tri_MTD, na.rm = TRUE)
+
+cor_heat_MTD <- ggplot(data = melted_cormat_MTD, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1))+
+  theme(axis.text.y = element_text(size = 12))+
+  coord_fixed()+
+  theme(plot.title = element_text(size = 20, face = "bold", margin = margin(b = 20, unit = "pt")))+
+  ggtitle("MTD GPR with NA Absolutes only")
+
+cor_heat_MTD
+
+# Save to working directory
+ggsave("cormat_MTD_GPR_nlyAbs.png", plot = cor_heat_MTD, width = 10, height = 8, units = "in", dpi = 600)
+ggsave("cormat_MTD_GPR_onlyAbs.jpg", plot = cor_heat_MTD, width = 10, height = 8, units = "in", dpi = 600)
+
+########################## Correlation analysis
+################# MTD
+############ Without missing values
+
+# Remove rows with missing values
+MTD_no_NA <- na.omit(data_MTD)
+
+# Standardize the variables
+MTD_noNA_scaled <- scale(MTD_no_NA[, numerical_columns])
+
+# Calculate the correlation matrix
+cor_matrix_MTD_noNA <- cor(MTD_noNA_scaled)
+
+# Print the correlation matrix
+print(cor_matrix_MTD_noNA)
+
+# helper function to get upper triangle of the correlation matrix
+get_upper_tri_MTD_noNA <- function(cor_matrix_MTD_noNA){
+  cor_matrix_MTD_noNA[lower.tri(cor_matrix_MTD_noNA)]<- NA
+  return(cor_matrix_MTD_noNA)
+}
+
+upper_tri_MTD_noNA <- get_upper_tri_MTD_noNA(cor_matrix_MTD_noNA)
+
+melted_cormat_MTD_noNA <- melt(upper_tri_MTD_noNA, na.rm = TRUE)
+
+cor_heat_MTD_noNA <- ggplot(data = melted_cormat_MTD_noNA, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1))+
+  theme(axis.text.y = element_text(size = 12))+
+  coord_fixed()+
+  theme(plot.title = element_text(size = 20, face = "bold", margin = margin(b = 20, unit = "pt")))+
+  ggtitle("MTD GPR without NA Absolutes only")
+
+cor_heat_MTD_noNA
+
+# Save to working directory
+ggsave("cormat_MTD_noNA_GPR_onlyAbs.png", plot = cor_heat_MTD_noNA, width = 10, height = 8, units = "in", dpi = 600)
+ggsave("cormat_MTD_noNA_GPR_onlyAbs.jpg", plot = cor_heat_MTD_noNA, width = 10, height = 8, units = "in", dpi = 600)
+
+################# YTD
+############ With missing values
+
+# Standardize the variables
+data_YTD_scaled <- scale(data_YTD[, numerical_columns])
+
+# Calculate the correlation matrix
+cor_matrix_YTD <- cor(data_YTD_scaled, use = "pairwise.complete.obs")
+
+# Print the correlation matrix
+print(cor_matrix_YTD)
+
+# helper function to get upper triangle of the correlation matrix
+get_upper_tri_YTD <- function(cor_matrix_YTD){
+  cor_matrix_YTD[lower.tri(cor_matrix_YTD)]<- NA
+  return(cor_matrix_YTD)
+}
+
+upper_tri_YTD <- get_upper_tri_YTD(cor_matrix_YTD)
+
+melted_cormat_YTD <- melt(upper_tri_YTD, na.rm = TRUE)
+
+cor_heat_YTD <- ggplot(data = melted_cormat_YTD, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1))+
+  theme(axis.text.y = element_text(size = 12))+
+  coord_fixed()+
+  theme(plot.title = element_text(size = 20, face = "bold", margin = margin(b = 20, unit = "pt")))+
+  ggtitle("YTD GPR with NA Absolutes only")
+
+cor_heat_YTD
+
+# Save to working directory
+ggsave("cormat_YTD_GPR_onlyAbs.png", plot = cor_heat_YTD, width = 10, height = 8, units = "in", dpi = 600)
+ggsave("cormat_YTD_GPR_onlyAbs.jpg", plot = cor_heat_YTD, width = 10, height = 8, units = "in", dpi = 600)
+
+########################## Correlation analysis
+################# YTD
+############ Without missing values
+
+# Remove rows with missing values
+YTD_no_NA <- na.omit(data_YTD)
+
+# Standardize the variables
+YTD_noNA_scaled <- scale(YTD_no_NA[, numerical_columns])
+
+# Calculate the correlation matrix
+cor_matrix_YTD_noNA <- cor(YTD_noNA_scaled)
+
+# Print the correlation matrix
+print(cor_matrix_YTD_noNA)
+
+# helper function to get upper triangle of the correlation matrix
+get_upper_tri_YTD_noNA <- function(cor_matrix_YTD_noNA){
+  cor_matrix_YTD_noNA[lower.tri(cor_matrix_YTD_noNA)]<- NA
+  return(cor_matrix_YTD_noNA)
+}
+
+upper_tri_YTD_noNA <- get_upper_tri_YTD_noNA(cor_matrix_YTD_noNA)
+
+melted_cormat_YTD_noNA <- melt(upper_tri_YTD_noNA, na.rm = TRUE)
+
+cor_heat_YTD_noNA <- ggplot(data = melted_cormat_YTD_noNA, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1))+
+  theme(axis.text.y = element_text(size = 12))+
+  coord_fixed()+
+  theme(plot.title = element_text(size = 20, face = "bold", margin = margin(b = 20, unit = "pt")))+
+  ggtitle("YTD GPR without NA Absolutes only")
+
+cor_heat_YTD_noNA
+
+# Save to working directory
+ggsave("cormat_YTD_noNA_GPR_onlyAbs.png", plot = cor_heat_YTD_noNA, width = 10, height = 8, units = "in", dpi = 600)
+ggsave("cormat_YTD_noNA_GPR_onlyAbs.jpg", plot = cor_heat_YTD_noNA, width = 10, height = 8, units = "in", dpi = 600)
+
+
